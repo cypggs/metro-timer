@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="32" fill="#3b82f6"/>
+  <g fill="white">
+    <!-- 地铁图标 -->
+    <rect x="32" y="56" width="128" height="80" rx="8"/>
+    <!-- 窗户 -->
+    <rect x="44" y="68" width="32" height="24" rx="4" fill="#3b82f6"/>
+    <rect x="84" y="68" width="32" height="24" rx="4" fill="#3b82f6"/>
+    <rect x="124" y="68" width="24" height="24" rx="4" fill="#3b82f6"/>
+    <!-- 车轮 -->
+    <circle cx="48" cy="136" r="8"/>
+    <circle cx="144" cy="136" r="8"/>
+    <!-- 时钟 -->
+    <circle cx="150" cy="40" r="20" fill="white"/>
+    <rect x="148" y="32" width="4" height="12" rx="1" fill="#3b82f6"/>
+    <rect x="146" y="38" width="8" height="4" rx="1" fill="#3b82f6"/>
+  </g>
+</svg>
