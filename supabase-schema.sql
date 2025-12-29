@@ -1,24 +1,19 @@
--- 地铁计时系统数据库 Schema
+-- 地铁计时系统数据库 Schema (免登录版本)
 -- 在 Supabase SQL Editor 中执行此文件
+
+-- 删除旧的表（如果存在）
+DROP TABLE IF EXISTS public.checkpoint_records CASCADE;
+DROP TABLE IF EXISTS public.checkpoints CASCADE;
+DROP TABLE IF EXISTS public.trips CASCADE;
+DROP TABLE IF EXISTS public.profiles CASCADE;
 
 -- 启用 UUID 扩展
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 用户表 (使用 Supabase Auth)
--- profiles 表同步 auth.users
-
-CREATE TABLE public.profiles (
-  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
-  email TEXT,
-  nickname TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 行程表
+-- 行程表 (使用本地生成的匿名ID作为user_id)
 CREATE TABLE public.trips (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  user_id TEXT NOT NULL,  -- 匿名ID，存储在localStorage中
   name TEXT NOT NULL,
   start_time TIMESTAMPTZ NOT NULL,
   end_time TIMESTAMPTZ,
@@ -64,65 +59,24 @@ CREATE INDEX idx_checkpoints_trip_id ON public.checkpoints(trip_id);
 CREATE INDEX idx_checkpoint_records_checkpoint_id ON public.checkpoint_records(checkpoint_id);
 CREATE INDEX idx_trips_created_at ON public.trips(created_at DESC);
 
--- 行级安全策略 (RLS)
+-- 行级安全策略 (RLS) - 匿名访问
+-- 由于使用本地存储的匿名ID，无需用户认证即可访问
 
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.checkpoints ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.checkpoint_records ENABLE ROW LEVEL SECURITY;
 
--- Profiles 策略：用户只能查看和修改自己的资料
-CREATE POLICY "用户可以查看自己的资料" ON public.profiles
-  FOR SELECT USING (auth.uid() = id);
+-- Trips 策略：允许匿名访问（基于user_id匹配localStorage中的ID）
+CREATE POLICY "允许匿名访问行程" ON public.trips
+  FOR ALL USING (true);
 
-CREATE POLICY "用户可以更新自己的资料" ON public.profiles
-  FOR UPDATE USING (auth.uid() = id);
+-- Checkpoints 策略：允许匿名访问
+CREATE POLICY "允许匿名访问打卡点" ON public.checkpoints
+  FOR ALL USING (true);
 
-CREATE POLICY "用户可以插入自己的资料" ON public.profiles
-  FOR INSERT WITH CHECK (auth.uid() = id);
-
--- Trips 策略：用户只能操作自己的行程
-CREATE POLICY "用户可以查看自己的行程" ON public.trips
-  FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY "用户可以更新自己的行程" ON public.trips
-  FOR UPDATE USING (auth.uid() = user_id);
-
-CREATE POLICY "用户可以删除自己的行程" ON public.trips
-  FOR DELETE USING (auth.uid() = user_id);
-
-CREATE POLICY "用户可以插入行程" ON public.trips
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- Checkpoints 策略
-CREATE POLICY "用户可以查看自己行程的打卡点" ON public.checkpoints
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.trips WHERE id = checkpoints.trip_id AND user_id = auth.uid())
-  );
-
-CREATE POLICY "用户可以操作自己行程的打卡点" ON public.checkpoints
-  FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.trips WHERE id = checkpoints.trip_id AND user_id = auth.uid())
-  );
-
--- Checkpoint Records 策略
-CREATE POLICY "用户可以查看自己的打卡记录" ON public.checkpoint_records
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM public.checkpoints c
-      JOIN public.trips t ON c.trip_id = t.id
-      WHERE c.id = checkpoint_records.checkpoint_id AND t.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "用户可以操作自己的打卡记录" ON public.checkpoint_records
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM public.checkpoints c
-      JOIN public.trips t ON c.trip_id = t.id
-      WHERE c.id = checkpoint_records.checkpoint_id AND t.user_id = auth.uid()
-    )
-  );
+-- Checkpoint Records 策略：允许匿名访问
+CREATE POLICY "允许匿名访问打卡记录" ON public.checkpoint_records
+  FOR ALL USING (true);
 
 -- 自动更新 updated_at 的触发器函数
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -133,67 +87,10 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- 为各表添加 updated_at 触发器
-CREATE TRIGGER update_profiles_updated_at
-  BEFORE UPDATE ON public.profiles
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
+-- 为trips表添加 updated_at 触发器
 CREATE TRIGGER update_trips_updated_at
   BEFORE UPDATE ON public.trips
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- 创建函数：自动创建用户资料
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.profiles (id, email, nickname)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'nickname', split_part(NEW.email, '@', 1))
-  );
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- 创建触发器
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- 视图：行程完整信息（包含所有打卡点和记录）
-CREATE OR REPLACE VIEW public.trip_details AS
-SELECT
-  t.id as trip_id,
-  t.name as trip_name,
-  t.start_time,
-  t.end_time,
-  t.status,
-  t.total_duration_seconds,
-  t.user_id,
-  json_agg(
-    json_build_object(
-      'checkpoint_id', c.id,
-      'checkpoint_name', c.name,
-      'checkpoint_type', c.checkpoint_type,
-      'sequence_order', c.sequence_order,
-      'records', (
-        SELECT json_agg(
-          json_build_object(
-            'record_id', cr.id,
-            'action_type', cr.action_type,
-            'timestamp', cr.timestamp
-          ) ORDER BY cr.timestamp
-        )
-        FROM public.checkpoint_records cr
-        WHERE cr.checkpoint_id = c.id
-      )
-    ) ORDER BY c.sequence_order
-  ) as checkpoints
-FROM public.trips t
-LEFT JOIN public.checkpoints c ON c.trip_id = t.id
-GROUP BY t.id;
 
 -- 授予访问权限
 GRANT USAGE ON SCHEMA public TO anon, authenticated;

@@ -8,13 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckInButton } from '@/components/CheckInButton'
 import { TripTimeline } from '@/components/TripTimeline'
-import { AuthForm } from '@/components/AuthForm'
-import { User } from 'lucide-react'
 import {
   Plus,
   Play,
-  Pause,
-  RotateCcw,
   History,
   BarChart3,
   Home,
@@ -29,24 +25,29 @@ export default function HomePage() {
   const [checkpoints, setCheckpoints] = useState<(Checkpoint & { records: CheckpointRecord[] })[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewTripModal, setShowNewTripModal] = useState(false)
-  const [showAuthModal, setShowAuthModal] = useState(false)
   const [newTripName, setNewTripName] = useState('')
   const [initialLocation, setInitialLocation] = useState<string>('家')
+
+  // 获取匿名用户ID（本地存储）
+  const getUserId = useCallback(() => {
+    let userId = localStorage.getItem('metro_timer_user_id')
+    if (!userId) {
+      userId = 'anon_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+      localStorage.setItem('metro_timer_user_id', userId)
+    }
+    return userId
+  }, [])
 
   // 获取当前行程
   const fetchCurrentTrip = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setLoading(false)
-        return
-      }
+      const userId = getUserId()
 
       // 查找进行中的行程
       const { data: trips } = await supabase
         .from('trips')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('status', 'in_progress')
         .order('created_at', { ascending: false })
         .limit(1)
@@ -90,7 +91,7 @@ export default function HomePage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [getUserId])
 
   useEffect(() => {
     fetchCurrentTrip()
@@ -110,11 +111,7 @@ export default function HomePage() {
   // 创建新行程
   const handleCreateTrip = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        alert('请先登录')
-        return
-      }
+      const userId = getUserId()
 
       // 获取位置
       let location: { lat: number; lng: number } | undefined
@@ -128,7 +125,7 @@ export default function HomePage() {
       const { data: trip, error: tripError } = await supabase
         .from('trips')
         .insert({
-          user_id: user.id,
+          user_id: userId,
           name: newTripName || generateDefaultTripName(),
           start_time: new Date().toISOString(),
           status: 'in_progress'
@@ -201,12 +198,6 @@ export default function HomePage() {
     if (!currentTrip) return
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        alert('请先登录')
-        return
-      }
-
       // 获取位置
       let location: { lat: number; lng: number } | undefined
       try {
@@ -329,9 +320,6 @@ export default function HomePage() {
         <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900">地铁计时器</h1>
           <div className="flex gap-2">
-            <Button variant="ghost" size="icon" onClick={() => setShowAuthModal(true)}>
-              <User className="w-5 h-5" />
-            </Button>
             <Link href="/statistics">
               <Button variant="ghost" size="icon">
                 <BarChart3 className="w-5 h-5" />
@@ -511,27 +499,6 @@ export default function HomePage() {
                   开始
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* 登录弹窗 */}
-      {showAuthModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-sm">
-            <CardHeader>
-              <CardTitle className="text-center">登录 / 注册</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AuthForm />
-              <Button
-                variant="ghost"
-                className="mt-4 w-full"
-                onClick={() => setShowAuthModal(false)}
-              >
-                关闭
-              </Button>
             </CardContent>
           </Card>
         </div>

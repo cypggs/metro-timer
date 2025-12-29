@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Trip, Checkpoint, CheckpointRecord } from '@/types'
+import { Trip } from '@/types'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { ArrowLeft, Loader2, Calendar, Clock, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { formatDuration } from '@/types'
@@ -13,18 +13,24 @@ export default function HistoryPage() {
   const [trips, setTrips] = useState<Trip[]>([])
   const [loading, setLoading] = useState(true)
 
+  // 获取匿名用户ID
+  const getUserId = useCallback(() => {
+    let userId = localStorage.getItem('metro_timer_user_id')
+    if (!userId) {
+      userId = 'anon_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+      localStorage.setItem('metro_timer_user_id', userId)
+    }
+    return userId
+  }, [])
+
   const fetchTrips = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setLoading(false)
-        return
-      }
+      const userId = getUserId()
 
       const { data } = await supabase
         .from('trips')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('status', 'completed')
         .order('created_at', { ascending: false })
         .limit(50)
@@ -35,7 +41,7 @@ export default function HistoryPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [getUserId])
 
   useEffect(() => {
     fetchTrips()
