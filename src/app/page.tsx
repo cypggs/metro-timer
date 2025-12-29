@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckInButton } from '@/components/CheckInButton'
 import { TripTimeline } from '@/components/TripTimeline'
+import { AuthForm } from '@/components/AuthForm'
+import { User } from 'lucide-react'
 import {
   Plus,
   Play,
@@ -27,6 +29,7 @@ export default function HomePage() {
   const [checkpoints, setCheckpoints] = useState<(Checkpoint & { records: CheckpointRecord[] })[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewTripModal, setShowNewTripModal] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
   const [newTripName, setNewTripName] = useState('')
   const [initialLocation, setInitialLocation] = useState<string>('家')
 
@@ -326,6 +329,9 @@ export default function HomePage() {
         <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900">地铁计时器</h1>
           <div className="flex gap-2">
+            <Button variant="ghost" size="icon" onClick={() => setShowAuthModal(true)}>
+              <User className="w-5 h-5" />
+            </Button>
             <Link href="/statistics">
               <Button variant="ghost" size="icon">
                 <BarChart3 className="w-5 h-5" />
@@ -505,6 +511,27 @@ export default function HomePage() {
                   开始
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* 登录弹窗 */}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-sm">
+            <CardHeader>
+              <CardTitle className="text-center">登录 / 注册</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AuthForm />
+              <Button
+                variant="ghost"
+                className="mt-4 w-full"
+                onClick={() => setShowAuthModal(false)}
+              >
+                关闭
+              </Button>
             </CardContent>
           </Card>
         </div>
